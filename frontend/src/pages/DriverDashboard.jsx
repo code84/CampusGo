@@ -34,7 +34,7 @@ export default function DriverDashboard() {
     } catch (e) { toast.error(formatApiError(e)); }
   }, []);
 
-  useEffect(() => { load(); refreshUser?.(); }, [load]);
+  useEffect(() => { load(); refreshUser?.(); }, [load,refreshUser]);
   useEffect(() => { setOnline(!!user?.is_online); }, [user]);
 
   useEffect(() => {
