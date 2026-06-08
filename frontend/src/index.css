@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --bg-base: #09090b;
+    --bg-surface: #18181b;
+    --bg-elevated: #27272a;
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-tertiary: #71717a;
+    --brand: #ffb800;
+    --brand-hover: #e5a600;
+    --kinetic: #007aff;
+    --success: #10b981;
+    --warning: #f5a524;
+    --danger: #ef4444;
+    --border: #27272a;
+}
+
+html, body, #root {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
+
+body {
+    margin: 0;
+    font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--bg-base);
+}
+
+.font-display {
+    font-family: 'Satoshi', sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.font-mono-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+}
+
+::selection {
+    background: var(--brand);
+    color: #000;
+}
+
+/* Subtle grain texture */
+.grain::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* Leaflet dark mode overrides */
+.leaflet-container {
+    background: #09090b !important;
+    font-family: 'IBM Plex Sans', sans-serif;
+}
+.leaflet-control-attribution {
+    background: rgba(9,9,11,0.7) !important;
+    color: #71717a !important;
+}
+.leaflet-control-attribution a {
+    color: #a1a1aa !important;
+}
+.leaflet-bar a {
+    background-color: #18181b !important;
+    color: #fafafa !important;
+    border-color: #27272a !important;
+}
+.leaflet-bar a:hover {
+    background-color: #27272a !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #09090b; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+/* Pulse for live indicator */
+@keyframes live-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(1.4); }
+}
+.live-dot {
+    animation: live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.fade-up {
+    animation: fade-in-up 0.45s ease-out both;
+}
+
+@layer base {
+    :root {
+        --background: 240 6% 6%;
+        --foreground: 0 0% 98%;
+        --card: 240 5% 9%;
+        --card-foreground: 0 0% 98%;
+        --popover: 240 5% 9%;
+        --popover-foreground: 0 0% 98%;
+        --primary: 45 100% 50%;
+        --primary-foreground: 0 0% 0%;
+        --secondary: 240 4% 16%;
+        --secondary-foreground: 0 0% 98%;
+        --muted: 240 4% 16%;
+        --muted-foreground: 240 5% 64%;
+        --accent: 240 4% 16%;
+        --accent-foreground: 0 0% 98%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 240 4% 16%;
+        --input: 240 4% 16%;
+        --ring: 45 100% 50%;
+        --radius: 0.5rem;
+    }
+}
+
+@layer base {
+    * { @apply border-border; }
+    body { @apply bg-background text-foreground; }
+}

@@ -1,0 +1,123 @@
+{
+  "theme_and_archetype": {
+    "domain": "Campus Mobility, Ride Management, Logistics",
+    "theme": "Dark",
+    "archetype": "4 (Swiss & High-Contrast)",
+    "rationale": "For a real-time logistics and ride management dashboard, the Swiss High-Contrast archetype in a dark theme ensures functional clarity, reduces eye strain during long sessions or night driving, and highlights critical data efficiently."
+  },
+  "typography": {
+    "headings": {
+      "family": "Satoshi, sans-serif",
+      "weights": ["600", "700", "900"],
+      "classes": "font-bold tracking-tight",
+      "import_url": "https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,300,400&display=swap"
+    },
+    "body": {
+      "family": "'IBM Plex Sans', sans-serif",
+      "weights": ["400", "500"],
+      "classes": "font-normal leading-relaxed text-zinc-300",
+      "import_url": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+    },
+    "mono": {
+      "family": "'JetBrains Mono', monospace",
+      "usage": "Use exclusively for metric numbers, ride IDs, timestamps, and live coordinates.",
+      "import_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+    }
+  },
+  "colors": {
+    "backgrounds": {
+      "base": "#09090B",
+      "surface": "#18181B",
+      "surface_elevated": "#27272A"
+    },
+    "text": {
+      "primary": "#FAFAFA",
+      "secondary": "#A1A1AA",
+      "tertiary": "#71717A"
+    },
+    "brand_accents": {
+      "primary": "#FFB800",
+      "primary_hover": "#E5A600",
+      "primary_foreground": "#000000",
+      "kinetic_trigger": "#007AFF"
+    },
+    "semantic": {
+      "success": "#10B981",
+      "warning": "#F5A524",
+      "danger": "#EF4444",
+      "info": "#3B82F6"
+    },
+    "borders": "#27272A"
+  },
+  "layout_and_spacing": {
+    "dashboard_grid": "MODE B: 'Control Room' Grid. Strict hierarchy, gap-4 to gap-6. Use col-span-1 for summary widgets, col-span-2 or col-span-3 for maps and charts.",
+    "padding_scale": "Use generous padding: p-6 or p-8 inside cards, p-4 on smaller widgets.",
+    "corners": "Subtle roundness, max 8px (rounded-md or rounded-lg). No exaggerated pills.",
+    "alignment": "Left-align dense tabular data and forms. Center-align empty states or broad summary numbers."
+  },
+  "components": {
+    "cards": {
+      "style": "Flat background, 1px solid border (border-zinc-800), no shadows on default state.",
+      "hover": "Slight lift (-translate-y-1) and ambient shadow."
+    },
+    "buttons": {
+      "primary": "bg-[#FFB800] text-black font-semibold rounded-md hover:bg-[#E5A600] transition-colors",
+      "secondary": "bg-zinc-800 text-white border border-zinc-700 hover:bg-zinc-700 hover:text-white"
+    },
+    "forms": {
+      "inputs": "bg-zinc-900 border-zinc-800 text-white focus:ring-2 focus:ring-[#FFB800] focus:border-transparent",
+      "labels": "text-xs uppercase tracking-widest text-zinc-400 mb-1 block"
+    },
+    "map": {
+      "integration": "React Leaflet",
+      "tile_layer": "MUST use a dark tile layer for seamless dark UI integration: url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'",
+      "markers": "Use solid brand colors (Amber/Yellow for Driver, Blue for Passenger)."
+    },
+    "navigation": {
+      "sidebar": "Fixed, dense vertical sidebar for driver/admin dashboards. border-r border-zinc-800 bg-zinc-950.",
+      "mobile_header": "Glassmorphism: bg-zinc-950/70 backdrop-blur-xl border-b border-zinc-800."
+    }
+  },
+  "visual_enhancers": {
+    "borders": "Expose the skeleton. Use grid borders to separate data cleanly without wrapping everything in isolated cards.",
+    "icons": "Use @phosphor-icons/react. Duotone or Regular weight for legibility.",
+    "textures": "Minimal. Stick to matte finishes. No gradients except for heatmap data points on maps."
+  },
+  "motion": {
+    "micro_interactions": "Hover states must explicitly declare background and text colors (e.g. hover:bg-zinc-800 hover:text-white).",
+    "transitions": "Use specific properties: transition: transform 0.2s ease, opacity 0.2s ease."
+  },
+  "accessibility": {
+    "contrast": "Ensure all text on maps has a solid backdrop or heavy text-shadow. Normal text must be at least 4.5:1 against #09090B.",
+    "focus": "All actionable items must have a visible focus state, e.g. focus-visible:ring-2 focus-visible:ring-[#FFB800] focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950.",
+    "testing": "All interactive elements MUST include a data-testid attribute (e.g., data-testid='request-ride-button')."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.pexels.com/photos/34929879/pexels-photo-34929879.jpeg",
+        "category": "auth_background",
+        "description": "Historic university courtyard at night - Use as a cinematic full-bleed background for the Passenger/Driver Login and Registration pages."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1624196639293-b04b44d39b59",
+        "category": "driver_vehicle_placeholder",
+        "description": "Auto rickshaw at night - Use as a placeholder for driver profile or vehicle images in the dashboard."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1508009603885-50cf7c579365",
+        "category": "marketing_hero",
+        "description": "Tuk tuks on street - Use if there is a landing/marketing page before entering the app."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "1. DEPENDENCIES: Install @phosphor-icons/react for all iconography. Use 'recharts' for demand analytics charts. Install 'react-leaflet' and 'leaflet' for map components.",
+    "2. TYPOGRAPHY: Inject the Fontshare and Google Fonts links provided in typography into index.html.",
+    "3. SHADCN SETUP: Use pure HTML/Tailwind for macro-layouts (the 'Control Room' grid). Use Shadcn components for complex interactions (Forms, Select, Dialog, Tables) but heavily customize them. Strip default borders/shadows to match the 'Cards' and 'Forms' rules defined here.",
+    "4. MAP UI: When integrating Leaflet, it is CRITICAL to use the CartoDB Dark Matter tile layer so it doesn't blind the user with white map tiles.",
+    "5. DATA-TESTID: Enforce 'data-testid' on every form input, button, and navigation link (e.g. data-testid='driver-online-toggle').",
+    "6. SPACING: Rely on CSS Grid with gap-4 or gap-6 for dashboards. Avoid deep nesting of divs when possible.",
+    "7. WEBSOCKETS: For real-time state changes, represent loading/syncing states with subtle Phosphor icon spinners or skeleton loaders in dark grey (bg-zinc-800)."
+  ]
+}
