@@ -81,6 +81,9 @@ class RideRequestBody(BaseModel):
     dest_lng: Optional[float] = None
     scheduled_for: Optional[str] = None  # ISO string for future ride
     notes: Optional[str] = None
+    fare_amount: Optional[int] = None
+    payment_id: Optional[str] = None
+    payment_status: Optional[str] = None
 
 class RatingBody(BaseModel):
     rating: int = Field(ge=1, le=5)
@@ -321,7 +324,9 @@ async def request_ride(body: RideRequestBody, user: dict = Depends(require_role(
         "started_at": None,
         "completed_at": None,
         "cancelled_at": None,
-        "fare_estimate": 30,
+        "fare_estimate": body.fare_amount or 30,
+        "payment_id": body.payment_id,
+        "payment_status": body.payment_status or "pending",
         "rating": None,
         "feedback": None,
     }

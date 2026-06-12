@@ -7,7 +7,72 @@ import LiveMap from "../components/LiveMap";
 import { StatCard, StatusBadge, Spinner, SectionTitle } from "../components/Bits";
 import { CAMPUS_LOCATIONS, findLocation } from "../lib/locations";
 import { toast } from "sonner";
-import { MapPin, Flag, Star, ArrowRight, X, Calendar } from "@phosphor-icons/react";
+import { MapPin, Flag, Star, ArrowRight, X, Calendar, CreditCard } from "@phosphor-icons/react";
+
+const RIDE_FARE_INR = 30;
+const RAZORPAY_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const existingScript = document.querySelector(`script[src="${RAZORPAY_CHECKOUT_SCRIPT}"]`);
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(true), { once: true });
+      existingScript.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_SCRIPT;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+async function openRazorpayCheckout({ amountInRupees, user, pickup, destination }) {
+  const key = process.env.REACT_APP_RAZORPAY_KEY_ID;
+  if (!key) {
+    throw new Error("Add REACT_APP_RAZORPAY_KEY_ID in frontend/.env to enable Razorpay test checkout.");
+  }
+
+  const isLoaded = await loadRazorpayCheckout();
+  if (!isLoaded || !window.Razorpay) {
+    throw new Error("Unable to load Razorpay checkout. Check your internet connection and try again.");
+  }
+
+  return new Promise((resolve, reject) => {
+    const checkout = new window.Razorpay({
+      key,
+      amount: amountInRupees * 100,
+      currency: "INR",
+      name: "CampusGo",
+      description: `Campus ride: ${pickup} to ${destination}`,
+      prefill: {
+        name: user?.name || "",
+        email: user?.email || "",
+        contact: user?.phone || "",
+      },
+      notes: {
+        pickup,
+        destination,
+        mode: "test",
+      },
+      theme: { color: "#FFB800" },
+      handler: resolve,
+      modal: {
+        ondismiss: () => reject(new Error("Payment was cancelled.")),
+      },
+    });
+
+    checkout.on("payment.failed", (response) => {
+      reject(new Error(response?.error?.description || "Payment failed. Please try again."));
+    });
+
+    checkout.open();
+  });
+}
 
 export default function PassengerHome() {
   const { user } = useAuth();
@@ -69,12 +134,18 @@ export default function PassengerHome() {
     if (pickup === destination) { toast.error("Pickup and destination must differ"); return; }
     setSubmitting(true);
     try {
+      const payment = await openRazorpayCheckout({ amountInRupees: RIDE_FARE_INR, user, pickup, destination });
+      toast.success("Payment successful. Booking your ride...");
+
       const { data } = await api.post("/rides/request", {
         pickup, destination,
         pickup_lat: p.lat, pickup_lng: p.lng,
         dest_lat: d.lat, dest_lng: d.lng,
         notes: notes || null,
         scheduled_for: scheduled || null,
+        fare_amount: RIDE_FARE_INR,
+        payment_id: payment.razorpay_payment_id,
+        payment_status: "paid",
       });
       setActiveRide(data);
       toast.success(scheduled ? "Ride scheduled" : "Searching for drivers…");
@@ -146,12 +217,16 @@ export default function PassengerHome() {
 
                 <div className="flex items-center justify-between text-xs text-zinc-500 pt-1">
                   <span>Est. fare</span>
-                  <span className="font-mono-num text-white">₹30</span>
+                  <span className="font-mono-num text-white">₹{RIDE_FARE_INR}</span>
+                </div>
+                <div className="flex items-center gap-2 rounded-md border border-zinc-900 bg-black/30 px-3 py-2 text-xs text-zinc-400">
+                  <CreditCard size={15} className="text-[#FFB800]" />
+                  Razorpay test checkout opens before ride booking.
                 </div>
 
                 <button data-testid="request-ride-button" disabled={submitting} className="w-full bg-[#FFB800] hover:bg-[#E5A600] text-black font-semibold py-3 rounded-md transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
                   {submitting ? <Spinner size={16} /> : <ArrowRight size={16} weight="bold" />}
-                  {scheduled ? "Schedule ride" : "Request ride now"}
+                  {scheduled ? `Pay ₹${RIDE_FARE_INR} & schedule ride` : `Pay ₹${RIDE_FARE_INR} & request ride now`}
                 </button>
               </form>
             )}
