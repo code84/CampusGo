@@ -134,7 +134,7 @@ REACT_APP_BACKEND_URL=http://127.0.0.1:8000
 REACT_APP_RAZORPAY_KEY_ID=rzp_test_RTsX9RpaHtSX4g
 ```
 
-`REACT_APP_RAZORPAY_KEY_ID` enables the Razorpay test checkout before a passenger ride is booked. This is a Create React App frontend, so use the `REACT_APP_` prefix, not `NEXT_PUBLIC_`. Do not put `RAZORPAY_KEY_SECRET` in `frontend/.env`; Razorpay secrets must stay server-side and should never be committed.
+`REACT_APP_RAZORPAY_KEY_ID` enables Razorpay test checkout after a driver accepts a passenger ride. This is a Create React App frontend, so use the `REACT_APP_` prefix, not `NEXT_PUBLIC_`. Do not put `RAZORPAY_KEY_SECRET` in `frontend/.env`; Razorpay secrets must stay server-side and should never be committed.
 
 ```bash
 npm start
@@ -179,6 +179,7 @@ Requires the server to be running. All 18 tests should pass.
 | GET | `/api/rides/{id}` | JWT | Ride details |
 | POST | `/api/rides/{id}/accept` | Driver | Accept a ride |
 | POST | `/api/rides/{id}/reject` | Driver | Soft-reject a ride |
+| POST | `/api/rides/{id}/payment` | Passenger | Mark accepted ride payment complete |
 | POST | `/api/rides/{id}/start` | Driver | Start ride |
 | POST | `/api/rides/{id}/complete` | Driver | Complete ride |
 | POST | `/api/rides/{id}/cancel` | Passenger/Driver | Cancel ride |

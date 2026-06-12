@@ -81,9 +81,11 @@ class RideRequestBody(BaseModel):
     dest_lng: Optional[float] = None
     scheduled_for: Optional[str] = None  # ISO string for future ride
     notes: Optional[str] = None
-    fare_amount: Optional[int] = None
-    payment_id: Optional[str] = None
-    payment_status: Optional[str] = None
+
+class PaymentBody(BaseModel):
+    fare_amount: int = Field(ge=1)
+    payment_id: str
+    payment_status: str
 
 class RatingBody(BaseModel):
     rating: int = Field(ge=1, le=5)
@@ -324,9 +326,9 @@ async def request_ride(body: RideRequestBody, user: dict = Depends(require_role(
         "started_at": None,
         "completed_at": None,
         "cancelled_at": None,
-        "fare_estimate": body.fare_amount or 30,
-        "payment_id": body.payment_id,
-        "payment_status": body.payment_status or "pending",
+        "fare_estimate": 30,
+        "payment_id": None,
+        "payment_status": "pending",
         "rating": None,
         "feedback": None,
     }
@@ -369,6 +371,30 @@ async def get_ride(ride_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Ride not found")
     return await _enrich_ride(ride)
 
+@api.post("/rides/{ride_id}/payment")
+async def mark_ride_paid(ride_id: str, body: PaymentBody, user: dict = Depends(require_role("passenger"))):
+    ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
+    if not ride:
+        raise HTTPException(status_code=404, detail="Ride not found")
+    if ride["passenger_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if ride["status"] != "accepted":
+        raise HTTPException(status_code=400, detail="Payment is available after a driver accepts the ride")
+    if body.payment_status != "paid":
+        raise HTTPException(status_code=400, detail="Payment was not completed")
+
+    await db.rides.update_one(
+        {"id": ride_id},
+        {"$set": {"fare_estimate": body.fare_amount, "payment_id": body.payment_id, "payment_status": "paid", "paid_at": now_iso()}},
+    )
+    ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
+    enriched = await _enrich_ride(ride)
+    await manager.send_to(ride["passenger_id"], {"type": "ride_update", "ride": enriched})
+    if ride.get("driver_id"):
+        await manager.send_to(ride["driver_id"], {"type": "ride_update", "ride": enriched})
+        await create_notification(ride["driver_id"], "Payment Complete", "Passenger payment is complete. You can start the ride now.", "payment_complete")
+    return enriched
+
 @api.post("/rides/{ride_id}/accept")
 async def accept_ride(ride_id: str, user: dict = Depends(require_verified_driver)):
     # Atomic accept: only one driver can win
@@ -395,6 +421,14 @@ async def reject_ride(ride_id: str, user: dict = Depends(require_role("driver"))
 
 @api.post("/rides/{ride_id}/start")
 async def start_ride(ride_id: str, user: dict = Depends(require_verified_driver)):
+    ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
+    if not ride:
+        raise HTTPException(status_code=404, detail="Ride not found")
+    if ride.get("driver_id") != user["id"] or ride.get("status") != "accepted":
+        raise HTTPException(status_code=400, detail="Cannot start ride")
+    if ride.get("payment_status") != "paid":
+        raise HTTPException(status_code=400, detail="Passenger payment is required before starting the ride")
+
     res = await db.rides.update_one(
         {"id": ride_id, "status": "accepted", "driver_id": user["id"]},
         {"$set": {"status": "in_progress", "started_at": now_iso()}},

@@ -159,6 +159,13 @@ class TestRideWorkflow:
         acc2 = requests.post(f"{API}/rides/{ride_id}/accept", headers=_auth(d2_tok), timeout=15)
         assert acc2.status_code == 409
 
+        # Passenger pays after driver acceptance
+        pay = requests.post(f"{API}/rides/{ride_id}/payment",
+                            json={"fare_amount": 30, "payment_id": f"pay_test_{uuid.uuid4().hex[:8]}", "payment_status": "paid"},
+                            headers=_auth(p_tok), timeout=15)
+        assert pay.status_code == 200, pay.text
+        assert pay.json()["payment_status"] == "paid"
+
         # Start
         st = requests.post(f"{API}/rides/{ride_id}/start", headers=_auth(d1_tok), timeout=15)
         assert st.status_code == 200

@@ -85,6 +85,7 @@ export default function PassengerHome() {
   const [activeRide, setActiveRide] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [paying, setPaying] = useState(false);
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState("");
 
@@ -134,18 +135,12 @@ export default function PassengerHome() {
     if (pickup === destination) { toast.error("Pickup and destination must differ"); return; }
     setSubmitting(true);
     try {
-      const payment = await openRazorpayCheckout({ amountInRupees: RIDE_FARE_INR, user, pickup, destination });
-      toast.success("Payment successful. Booking your ride...");
-
       const { data } = await api.post("/rides/request", {
         pickup, destination,
         pickup_lat: p.lat, pickup_lng: p.lng,
         dest_lat: d.lat, dest_lng: d.lng,
         notes: notes || null,
         scheduled_for: scheduled || null,
-        fare_amount: RIDE_FARE_INR,
-        payment_id: payment.razorpay_payment_id,
-        payment_status: "paid",
       });
       setActiveRide(data);
       toast.success(scheduled ? "Ride scheduled" : "Searching for drivers…");
@@ -165,6 +160,24 @@ export default function PassengerHome() {
       setActiveRide(null);
       loadAll();
     } catch (e) { toast.error(formatApiError(e)); }
+  };
+
+  const payForRide = async () => {
+    if (!activeRide || activeRide.status !== "accepted") return;
+    const amount = activeRide.fare_estimate || RIDE_FARE_INR;
+    setPaying(true);
+    try {
+      const payment = await openRazorpayCheckout({ amountInRupees: amount, user, pickup: activeRide.pickup, destination: activeRide.destination });
+      const { data } = await api.post(`/rides/${activeRide.id}/payment`, {
+        fare_amount: amount,
+        payment_id: payment.razorpay_payment_id,
+        payment_status: "paid",
+      });
+      setActiveRide(data);
+      toast.success("Payment successful. Ride can start now.");
+      loadAll();
+    } catch (e) { toast.error(formatApiError(e)); }
+    finally { setPaying(false); }
   };
 
   const submitRating = async () => {
@@ -193,7 +206,7 @@ export default function PassengerHome() {
           {/* Booking form / Active ride */}
           <div className="lg:col-span-1 space-y-6">
             {activeRide && ["requested", "accepted", "in_progress"].includes(activeRide.status) ? (
-              <ActiveRideCard ride={activeRide} onCancel={cancelRide} />
+              <ActiveRideCard ride={activeRide} onCancel={cancelRide} onPay={payForRide} paying={paying} />
             ) : (
               <form onSubmit={requestRide} className="p-6 border border-zinc-900 bg-zinc-950 rounded-md space-y-4 fade-up" data-testid="ride-request-form">
                 <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">New ride</div>
@@ -221,12 +234,12 @@ export default function PassengerHome() {
                 </div>
                 <div className="flex items-center gap-2 rounded-md border border-zinc-900 bg-black/30 px-3 py-2 text-xs text-zinc-400">
                   <CreditCard size={15} className="text-[#FFB800]" />
-                  Razorpay test checkout opens before ride booking.
+                  Pay after your driver accepts the ride.
                 </div>
 
                 <button data-testid="request-ride-button" disabled={submitting} className="w-full bg-[#FFB800] hover:bg-[#E5A600] text-black font-semibold py-3 rounded-md transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
                   {submitting ? <Spinner size={16} /> : <ArrowRight size={16} weight="bold" />}
-                  {scheduled ? `Pay ₹${RIDE_FARE_INR} & schedule ride` : `Pay ₹${RIDE_FARE_INR} & request ride now`}
+                  {scheduled ? "Schedule ride" : "Request ride now"}
                 </button>
               </form>
             )}
@@ -300,7 +313,10 @@ export default function PassengerHome() {
   );
 }
 
-function ActiveRideCard({ ride, onCancel }) {
+function ActiveRideCard({ ride, onCancel, onPay, paying }) {
+  const needsPayment = ride.status === "accepted" && ride.payment_status !== "paid";
+  const isPaid = ride.payment_status === "paid";
+
   return (
     <div className="p-6 border border-zinc-900 bg-zinc-950 rounded-md fade-up" data-testid="active-ride-card">
       <div className="flex items-center justify-between mb-4">
@@ -331,6 +347,19 @@ function ActiveRideCard({ ride, onCancel }) {
       <button onClick={onCancel} data-testid="cancel-ride-button" className="mt-5 w-full flex items-center justify-center gap-2 py-2.5 border border-zinc-800 hover:border-rose-500/40 hover:text-rose-400 text-zinc-300 rounded-md text-sm transition-colors">
         <X size={14} /> Cancel ride
       </button>
+
+      {needsPayment && (
+        <button type="button" onClick={onPay} disabled={paying} data-testid="pay-ride-button" className="mt-3 w-full bg-[#FFB800] hover:bg-[#E5A600] text-black font-semibold py-2.5 rounded-md transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+          {paying ? <Spinner size={14} /> : <CreditCard size={14} weight="fill" />}
+          Pay ₹{ride.fare_estimate || RIDE_FARE_INR} to start ride
+        </button>
+      )}
+
+      {isPaid && ride.status === "accepted" && (
+        <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+          Payment complete. Your driver can start the ride now.
+        </div>
+      )}
     </div>
   );
 }
