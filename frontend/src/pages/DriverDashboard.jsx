@@ -231,6 +231,8 @@ function InboxItem({ ride, onAccept, onReject }) {
 }
 
 function DriverActiveRide({ ride, onStart, onComplete }) {
+  const canStart = ride.payment_status === "paid";
+
   return (
     <div className="p-6 border border-[#FFB800]/30 bg-zinc-950 rounded-md fade-up" data-testid="driver-active-ride">
       <div className="flex items-center justify-between mb-4">
@@ -251,8 +253,8 @@ function DriverActiveRide({ ride, onStart, onComplete }) {
       </div>
 
       {ride.status === "accepted" && (
-        <button data-testid="start-ride-button" onClick={onStart} className="mt-5 w-full bg-[#FFB800] hover:bg-[#E5A600] text-black font-semibold py-2.5 rounded-md transition-colors flex items-center justify-center gap-2">
-          <Play size={14} weight="fill" /> Start ride
+        <button data-testid="start-ride-button" onClick={onStart} disabled={!canStart} className="mt-5 w-full bg-[#FFB800] hover:bg-[#E5A600] text-black font-semibold py-2.5 rounded-md transition-colors flex items-center justify-center gap-2 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:cursor-not-allowed">
+          <Play size={14} weight="fill" /> {canStart ? "Start ride" : "Waiting for passenger payment"}
         </button>
       )}
       {ride.status === "in_progress" && (

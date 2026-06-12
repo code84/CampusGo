@@ -1,207 +1,392 @@
-# CampusGo — Real-Time Campus Mobility Platform
+# CampusGo - Real-Time Campus Mobility Platform
 
-A centralized digital dispatch system for the IIT Roorkee e-rickshaw network. Passengers and drivers can discover, request, assign, and manage rides with real-time state synchronization across all clients.
+CampusGo is a full-stack campus ride dispatch system for the IIT Roorkee e-rickshaw network. It supports role-based passenger, driver, and admin workflows with live ride updates, maps, notifications, analytics, post-ride feedback, and Razorpay test checkout after driver acceptance.
+
+## Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Local Setup](#local-setup)
+- [Environment Variables](#environment-variables)
+- [Razorpay Test Payment Flow](#razorpay-test-payment-flow)
+- [Test Accounts](#test-accounts)
+- [API Reference](#api-reference)
+- [Testing](#testing)
+- [Design System](#design-system)
+- [Security Notes](#security-notes)
+
+## Features
+
+### Passenger
+
+- Register and login as a passenger.
+- Request rides between predefined IIT Roorkee campus locations.
+- Add optional schedule time and ride notes.
+- See online drivers, pickup marker, destination marker, and route on the live map.
+- Track ride lifecycle: `requested` -> `accepted` -> `in_progress` -> `completed`.
+- Pay through Razorpay test checkout only after a driver accepts the ride.
+- Cancel active rides before completion.
+- Submit inline post-ride rating and feedback only after a completed unrated ride.
+- View ride history with status filters.
+- View passenger analytics such as total rides, completed rides, active rides, and status breakdown.
+
+### Driver
+
+- Register and login as a driver.
+- Driver accounts enter a verification queue before full availability.
+- Toggle online/offline availability with location updates.
+- Receive real-time ride requests through WebSocket events.
+- Accept or reject available ride requests.
+- Atomic ride acceptance prevents two drivers from accepting the same ride.
+- Start a ride only after passenger payment is marked complete.
+- Complete active rides.
+- View current ride route and rider details.
+- View driver analytics, recent rides, ratings, and estimated earnings.
+
+### Admin
+
+- Login as admin.
+- View platform dashboard stats for users, drivers, online drivers, rides, and revenue estimates.
+- View recent ride activity.
+- Review pending driver verification requests.
+- Approve or reject drivers with optional notes.
+- Monitor platform trends and ride status distribution.
+
+### Real-Time System
+
+- FastAPI WebSocket endpoint at `/api/ws?token=<jwt>`.
+- Socket provider reconnects clients automatically.
+- Live events include ride requests, ride updates, driver availability, driver location, notifications, and new ratings.
+
+### Notifications
+
+- Persistent notification inbox.
+- Live unread notification count.
+- Mark single notifications as read.
+- Mark all notifications as read.
+- Ride, rating, payment, and driver verification notification types.
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| **Backend** | Python 3.11+, FastAPI, Motor (async MongoDB), PyJWT + bcrypt |
-| **Frontend** | React 19, react-router 7, Tailwind CSS 3, Radix UI primitives |
-| **Maps** | React-Leaflet + CartoDB Dark Matter tiles + OSRM routing |
-| **Charts** | Recharts |
-| **Icons** | @phosphor-icons/react |
-| **Real-time** | Native FastAPI WebSocket (`/api/ws`) |
-| **Build** | CRACO (CRA override) |
+|---|---|
+| Backend | Python, FastAPI, Motor, MongoDB, Pydantic, PyJWT, bcrypt |
+| Frontend | React 18, React Router 7, CRACO, Tailwind CSS, Radix UI components |
+| Maps | React-Leaflet, Leaflet, CartoDB Dark Matter tiles, OSRM routing |
+| Charts | Recharts |
+| Icons | Phosphor Icons |
+| Payments | Razorpay Checkout test mode |
+| Realtime | FastAPI WebSocket |
+| Tests | pytest, requests, websockets |
 
 ## Project Structure
 
-```
-CampusGo-main/
+```text
+CampusGo/
 ├── backend/
-│   ├── server.py             # FastAPI app: auth, rides, drivers, analytics, WS
-│   ├── requirements.txt
-│   ├── .env                  # MongoDB URI, JWT secret, admin creds
-│   └── tests/
-│       └── backend_test.py   # 18 pytest tests (100% passing)
+│   ├── server.py                 # FastAPI app, API routes, WebSocket, seed data
+│   ├── requirements.txt          # Python dependencies
+│   ├── .env                      # Local backend env file, ignored by Git
+│   ├── tests/
+│   │   └── backend_test.py       # Backend API and WebSocket tests
+│   └── venv/                     # Local virtualenv, ignored by Git
 ├── frontend/
-│   ├── src/
-│   │   ├── App.js            # Routing, auth guards, layout
-│   │   ├── index.js          # Entry point (React Query provider)
-│   │   ├── pages/            # Landing, Login, Register, PassengerHome,
-│   │   │                     # DriverDashboard, DriverInbox, DriverAnalytics,
-│   │   │                     # AdminDashboard, Notifications, History, Profile
-│   │   ├── components/       # AppLayout, LiveMap, Bits (StatCard, etc.)
-│   │   ├── lib/              # api.js, AuthContext, SocketContext, locations
-│   │   ├── hooks/            # use-toast (shadcn)
-│   │   └── constants/testIds/
-│   ├── public/index.html
-│   ├── package.json
-│   └── tailwind.config.js
+│   ├── env.example               # Safe frontend env template
+│   ├── package.json              # React app scripts and dependencies
+│   ├── craco.config.js           # CRA override config
+│   ├── tailwind.config.js        # Tailwind config
+│   ├── public/
+│   │   └── index.html
+│   └── src/
+│       ├── App.js                # App routing and role guards
+│       ├── index.js              # React entry point
+│       ├── components/
+│       │   ├── AppLayout.jsx     # Authenticated app shell
+│       │   ├── Bits.jsx          # Shared UI primitives
+│       │   ├── LiveMap.jsx       # Leaflet map and route rendering
+│       │   └── ui/               # Radix/shadcn-style UI components
+│       ├── constants/testIds/    # Test id constants
+│       ├── hooks/                # Shared hooks
+│       ├── lib/
+│       │   ├── api.js            # Axios client and WebSocket URL helper
+│       │   ├── AuthContext.jsx   # Auth state and token persistence
+│       │   ├── SocketContext.jsx # WebSocket lifecycle
+│       │   └── locations.js      # Campus location data
+│       └── pages/
+│           ├── Landing.jsx
+│           ├── Login.jsx
+│           ├── Register.jsx
+│           ├── PassengerHome.jsx
+│           ├── DriverDashboard.jsx
+│           ├── DriverInbox.jsx
+│           ├── DriverAnalytics.jsx
+│           ├── AdminDashboard.jsx
+│           ├── History.jsx
+│           ├── Notifications.jsx
+│           └── Profile.jsx
 ├── memory/
-│   └── PRD.md                # Product requirements document
-├── test_reports/
-│   └── iteration_1.json      # E2E test results and observations
-└── design_guidelines.json    # Dark Swiss/high-contrast design system
+│   └── PRD.md                    # Product requirement notes
+├── test_reports/                 # Test report artifacts
+├── tests/                        # Root test package placeholder
+├── design_guidelines.json        # Visual design guidance
+├── .gitignore
+└── README.md
 ```
 
-## Features
-
-### Authentication
-- JWT-based custom auth with role separation (passenger / driver / admin)
-- Register, login, logout, session persistence via `Authorization` header + localStorage
-
-### Passenger
-- Ride booking form with campus location selector (12 predefined IITR points)
-- Optional ride scheduling and notes
-- Live map showing online drivers + pickup/destination markers + route visualization via OSRM polylines
-- Active ride lifecycle tracker (requested → accepted → in_progress → completed) with real-time route updates when driver location changes
-- Post-ride rating (1–5 stars) with feedback
-- Ride history with status filters
-- Analytics summary (total, completed, active rides)
-
-### Driver
-- Online/offline toggle with location ping
-- Real-time ride inbox (WebSocket push for new requests)
-- Atomic first-driver-wins ride acceptance (409 on race conditions)
-- Active ride management (accept → start → complete) with map showing driver → pickup → destination route polylines
-- Driver verification system (license number, college ID — pending/approved/rejected)
-- Analytics dashboard: timeline chart (7-day), status breakdown pie chart, earnings estimate
-- Campus-wide demand analytics (hourly bar chart, top pickup points)
-- Ride history with status filters
-
-### Admin
-- Dashboard with 7 stat cards (users, drivers, online, rides breakdown, revenue)
-- Ride trend chart (7-day timeline) + status distribution pie chart
-- Recent activity feed (last 10 rides, enriched with passenger/driver details)
-- Driver verification queue with approve/reject actions
-
-### Notifications
-- Persistent notification inbox with read/unread tracking
-- Real-time push via WebSocket `notification` events
-- Bell icon with live unread count badge in sidebar + mobile header
-- Dropdown preview of recent notifications
-- Mark single or all notifications as read
-- Notification types: ride events (requested, accepted, started, completed, cancelled), new ratings, driver verification status changes
-
-### Real-Time
-- WebSocket at `/api/ws?token=<jwt>` with auto-reconnect (2.5s)
-- Events: `new_ride_request`, `ride_taken`, `ride_update`, `driver_availability`, `driver_location`, `new_rating`, `notification`
-
-## Getting Started
+## Local Setup
 
 ### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- MongoDB 6+ (local or Atlas)
 
-### 1. Backend Setup
+- Python 3.11 or newer.
+- Node.js 18 or newer.
+- MongoDB 6 or newer, local or Atlas.
+- Razorpay test key id for frontend checkout testing.
+
+### 1. Clone
+
+```bash
+git clone https://github.com/code84/CampusGo.git
+cd CampusGo
+```
+
+### 2. Backend
 
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate      # Windows
-source venv/bin/activate   # Linux/Mac
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Edit `backend/.env` (defaults work for local MongoDB):
-```
+Create `backend/.env`:
+
+```env
 MONGO_URL="mongodb://localhost:27017"
 DB_NAME="campus_mobility"
-JWT_SECRET="<change-this-in-production>"
+JWT_SECRET="change-this-in-production"
 CORS_ORIGINS="http://localhost:3000"
 ADMIN_EMAIL="admin@iitr.ac.in"
 ADMIN_PASSWORD="admin123"
 ```
 
+Start the backend:
+
 ```bash
 uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The server auto-seeds: 1 admin, 1 passenger, 3 drivers, and 18 historical rides on first startup.
+Useful backend URLs:
 
-### 2. Frontend Setup
+- API root: `http://127.0.0.1:8000/api/`
+- Swagger docs: `http://127.0.0.1:8000/docs`
+- WebSocket: `ws://127.0.0.1:8000/api/ws?token=<jwt>`
+
+The backend seeds the default admin, passenger, drivers, and historical ride data on startup if they do not already exist.
+
+### 3. Frontend
 
 ```bash
 cd frontend
 npm install
 ```
 
-Edit `frontend/.env`:
-```
+Create `frontend/.env`. You can copy from `frontend/env.example`:
+
+```env
 REACT_APP_BACKEND_URL=http://127.0.0.1:8000
 REACT_APP_RAZORPAY_KEY_ID=rzp_test_RTsX9RpaHtSX4g
 ```
 
-`REACT_APP_RAZORPAY_KEY_ID` enables the Razorpay test checkout before a passenger ride is booked. This is a Create React App frontend, so use the `REACT_APP_` prefix, not `NEXT_PUBLIC_`. Do not put `RAZORPAY_KEY_SECRET` in `frontend/.env`; Razorpay secrets must stay server-side and should never be committed.
+Start the frontend:
 
 ```bash
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open `http://localhost:3000`.
 
-### 3. Run Tests (Backend)
+## Environment Variables
+
+### Backend `.env`
+
+| Variable | Required | Description |
+|---|---|---|
+| `MONGO_URL` | Yes | MongoDB connection string. |
+| `DB_NAME` | Yes | MongoDB database name. |
+| `JWT_SECRET` | Yes | Secret used to sign JWT access tokens. |
+| `CORS_ORIGINS` | Yes | Comma-separated allowed frontend origins. |
+| `ADMIN_EMAIL` | Yes | Seed admin email. |
+| `ADMIN_PASSWORD` | Yes | Seed admin password. |
+
+### Frontend `.env`
+
+| Variable | Required | Description |
+|---|---|---|
+| `REACT_APP_BACKEND_URL` | Yes | Backend base URL without `/api`. |
+| `REACT_APP_RAZORPAY_KEY_ID` | Yes for payment testing | Razorpay public test key id used by Checkout. |
+
+This is a Create React App frontend, so client-exposed variables must use the `REACT_APP_` prefix. Do not use `NEXT_PUBLIC_` here.
+
+## Razorpay Test Payment Flow
+
+CampusGo uses Razorpay Checkout in test mode to demonstrate the payment process.
+
+Current flow:
+
+1. Passenger clicks **Request ride now**.
+2. Backend creates a ride with `payment_status: pending` and `fare_estimate: 30`.
+3. Driver accepts the ride.
+4. Passenger sees **Pay ₹30 to start ride** below **Cancel ride**.
+5. Razorpay Checkout opens from that payment button.
+6. On successful test payment, frontend calls `POST /api/rides/{id}/payment`.
+7. Backend stores `payment_id`, `payment_status: paid`, `fare_estimate`, and `paid_at`.
+8. Driver receives a live update and can start the ride.
+9. Backend blocks `POST /api/rides/{id}/start` until payment is paid.
+
+Important security note: `REACT_APP_RAZORPAY_KEY_ID` is public and safe for the frontend. `RAZORPAY_KEY_SECRET` must stay server-side and must never be committed. The current integration is test/demo checkout and does not perform server-side Razorpay signature verification.
+
+## Test Accounts
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | `admin@iitr.ac.in` | `admin123` |
+| Passenger | `passenger@iitr.ac.in` | `passenger123` |
+| Driver 1 | `driver1@iitr.ac.in` | `driver123` |
+| Driver 2 | `driver2@iitr.ac.in` | `driver123` |
+| Driver 3 | `driver3@iitr.ac.in` | `driver123` |
+
+## API Reference
+
+All REST endpoints are mounted under `/api`.
+
+### Auth
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/auth/register` | Public | Register passenger or driver. |
+| `POST` | `/auth/login` | Public | Login and receive JWT. |
+| `POST` | `/auth/logout` | Cookie/session | Clear auth cookie. |
+| `GET` | `/auth/me` | JWT | Return current user. |
+
+### Drivers
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/drivers/online` | JWT | List online drivers. |
+| `POST` | `/drivers/availability` | Driver | Toggle online status and update location. |
+| `POST` | `/drivers/location` | Verified driver | Update live driver coordinates. |
+| `GET` | `/drivers/{driver_id}` | JWT | Get public driver profile. |
+
+### Rides
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/rides/request` | Passenger | Request a ride. |
+| `GET` | `/rides/mine` | JWT | List current user's rides. |
+| `GET` | `/rides/available` | Driver | List unassigned immediate ride requests. |
+| `GET` | `/rides/{ride_id}` | JWT | Get ride details. |
+| `POST` | `/rides/{ride_id}/accept` | Verified driver | Accept requested ride atomically. |
+| `POST` | `/rides/{ride_id}/reject` | Driver | Soft reject a ride. |
+| `POST` | `/rides/{ride_id}/payment` | Passenger | Mark accepted ride payment complete. |
+| `POST` | `/rides/{ride_id}/start` | Verified driver | Start paid accepted ride. |
+| `POST` | `/rides/{ride_id}/complete` | Verified driver | Complete in-progress ride. |
+| `POST` | `/rides/{ride_id}/cancel` | Passenger or assigned driver | Cancel non-completed ride. |
+| `POST` | `/rides/{ride_id}/rate` | Passenger | Rate completed ride and send feedback. |
+
+### Analytics
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/analytics/driver` | Driver | Driver stats, timeline, status breakdown, earnings estimate. |
+| `GET` | `/analytics/passenger` | Passenger | Passenger ride totals and status breakdown. |
+| `GET` | `/analytics/demand` | JWT | Hourly demand and top pickup locations. |
+
+### Admin
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/admin/stats` | Admin | Platform stats. |
+| `GET` | `/admin/recent-activity` | Admin | Recent enriched rides. |
+| `GET` | `/admin/pending-drivers` | Admin | Pending driver verification queue. |
+| `POST` | `/admin/drivers/{driver_id}/approve` | Admin | Approve driver verification. |
+| `POST` | `/admin/drivers/{driver_id}/reject` | Admin | Reject driver verification with optional notes. |
+
+### Notifications
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/notifications` | JWT | List user notifications. |
+| `GET` | `/notifications/unread-count` | JWT | Return unread count. |
+| `POST` | `/notifications/{notif_id}/read` | JWT | Mark notification as read. |
+| `POST` | `/notifications/read-all` | JWT | Mark all notifications as read. |
+
+### Health and Realtime
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/` | Public | API health check under `/api/`. |
+| `WS` | `/ws?token=<jwt>` | JWT | Authenticated realtime socket under `/api/ws`. |
+
+## Testing
+
+### Frontend build
+
+```bash
+cd frontend
+npm run build
+```
+
+### Frontend tests
+
+```bash
+cd frontend
+npm test -- --watchAll=false
+```
+
+### Backend tests
+
+Start MongoDB and the backend server first, then run:
 
 ```bash
 cd backend
-pytest tests/backend_test.py -v
+venv\Scripts\python.exe -m pytest tests\backend_test.py -v
 ```
 
-Requires the server to be running. All 18 tests should pass.
-
-## Test Credentials
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@iitr.ac.in | admin123 |
-| Passenger | passenger@iitr.ac.in | passenger123 |
-| Driver 1 | driver1@iitr.ac.in | driver123 |
-| Driver 2 | driver2@iitr.ac.in | driver123 |
-| Driver 3 | driver3@iitr.ac.in | driver123 |
-
-## API Endpoints
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/auth/register` | — | Register (passenger/driver) |
-| POST | `/api/auth/login` | — | Login |
-| POST | `/api/auth/logout` | — | Logout |
-| GET | `/api/auth/me` | JWT | Current user |
-| GET | `/api/drivers/online` | JWT | List online drivers |
-| POST | `/api/drivers/availability` | Driver | Toggle online/offline + location |
-| POST | `/api/drivers/location` | Driver | Update live location |
-| GET | `/api/drivers/{id}` | JWT | Get driver profile |
-| POST | `/api/rides/request` | Passenger | Request a ride |
-| GET | `/api/rides/mine` | JWT | User's ride history |
-| GET | `/api/rides/available` | Driver | Available ride requests |
-| GET | `/api/rides/{id}` | JWT | Ride details |
-| POST | `/api/rides/{id}/accept` | Driver | Accept a ride |
-| POST | `/api/rides/{id}/reject` | Driver | Soft-reject a ride |
-| POST | `/api/rides/{id}/start` | Driver | Start ride |
-| POST | `/api/rides/{id}/complete` | Driver | Complete ride |
-| POST | `/api/rides/{id}/cancel` | Passenger/Driver | Cancel ride |
-| POST | `/api/rides/{id}/rate` | Passenger | Rate completed ride |
-| GET | `/api/analytics/driver` | Driver | Driver analytics |
-| GET | `/api/analytics/passenger` | Passenger | Passenger analytics |
-| GET | `/api/analytics/demand` | JWT | Campus demand data |
-| GET | `/api/admin/stats` | Admin | Platform statistics |
-| GET | `/api/admin/recent-activity` | Admin | Last 10 enriched rides |
-| GET | `/api/admin/pending-drivers` | Admin | Unverified drivers |
-| POST | `/api/admin/drivers/{id}/approve` | Admin | Approve driver verification |
-| POST | `/api/admin/drivers/{id}/reject` | Admin | Reject driver verification |
-| GET | `/api/notifications` | JWT | User's notifications |
-| GET | `/api/notifications/unread-count` | JWT | Unread notification count |
-| POST | `/api/notifications/{id}/read` | JWT | Mark notification read |
-| POST | `/api/notifications/read-all` | JWT | Mark all notifications read |
-| WS | `/api/ws?token=` | JWT | Real-time events |
+Current backend suite covers auth, driver availability, ride workflow, payment-before-start enforcement through the workflow, analytics, and WebSocket auth.
 
 ## Design System
 
-- **Theme**: Dark, Swiss high-contrast archetype
-- **Palette**: Zinc base (`#09090B` / `#18181B`) + Amber accent (`#FFB800`)
-- **Typography**: Satoshi (headings), IBM Plex Sans (body), JetBrains Mono (data)
-- **Maps**: CartoDB Dark Matter tile layer + OSRM routing engine for route polylines
-- **Components**: Flat cards with 1px borders, subtle hover lift, no shadows
-- **Accessibility**: `data-testid` on all interactive elements, 4.5:1 contrast minimum
+- Dark Swiss/high-contrast visual language.
+- Zinc base surfaces with amber `#FFB800` primary accent.
+- Flat cards, 1px borders, minimal shadows, strong grid alignment.
+- Satoshi-style display typography and compact uppercase metadata labels.
+- JetBrains Mono-style numeric/data presentation.
+- Live map uses dark tiles and route polylines.
+- Interactive elements include `data-testid` attributes for reliable tests.
+
+## Security Notes
+
+- `.env` files are ignored by Git and should stay local.
+- Do not commit JWT secrets, Razorpay secret keys, MongoDB credentials, or admin production passwords.
+- Frontend Razorpay key id is public by design; Razorpay key secret is private and must remain server-side.
+- Passwords are hashed with bcrypt.
+- JWT auth supports `Authorization: Bearer <token>` and cookie fallback.
+- Driver start is guarded server-side and requires a paid accepted ride.
+
+## Common Commands
+
+| Task | Command |
+|---|---|
+| Start backend | `cd backend`, then `uvicorn server:app --reload --host 0.0.0.0 --port 8000` |
+| Start frontend | `cd frontend`, then `npm start` |
+| Build frontend | `cd frontend`, then `npm run build` |
+| Run backend tests | `cd backend`, then `venv\Scripts\python.exe -m pytest tests\backend_test.py -v` |
+| Check backend syntax | `cd backend`, then `venv\Scripts\python.exe -m py_compile server.py` |
+
+## Notes
+
+- The backend stores ride payment metadata as `payment_id`, `payment_status`, `fare_estimate`, and `paid_at`.
+- Scheduled rides are stored with `scheduled_for` and are not broadcast to available drivers immediately.
+- Driver verification is required before driver availability/location/start actions that use `require_verified_driver`.
+- This repository currently uses npm commands in the frontend workflow, although `package.json` includes Yarn package manager metadata.
