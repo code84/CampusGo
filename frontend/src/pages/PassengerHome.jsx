@@ -7,7 +7,72 @@ import LiveMap from "../components/LiveMap";
 import { StatCard, StatusBadge, Spinner, SectionTitle } from "../components/Bits";
 import { CAMPUS_LOCATIONS, findLocation } from "../lib/locations";
 import { toast } from "sonner";
-import { MapPin, Flag, Star, ArrowRight, X, Calendar } from "@phosphor-icons/react";
+import { MapPin, Flag, Star, ArrowRight, X, Calendar, CreditCard } from "@phosphor-icons/react";
+
+const RIDE_FARE_INR = 30;
+const RAZORPAY_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
+
+function loadRazorpayCheckout() {
+  if (window.Razorpay) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const existingScript = document.querySelector(`script[src="${RAZORPAY_CHECKOUT_SCRIPT}"]`);
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(true), { once: true });
+      existingScript.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_SCRIPT;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+async function openRazorpayCheckout({ amountInRupees, user, pickup, destination }) {
+  const key = process.env.REACT_APP_RAZORPAY_KEY_ID;
+  if (!key) {
+    throw new Error("Add REACT_APP_RAZORPAY_KEY_ID in frontend/.env to enable Razorpay test checkout.");
+  }
+
+  const isLoaded = await loadRazorpayCheckout();
+  if (!isLoaded || !window.Razorpay) {
+    throw new Error("Unable to load Razorpay checkout. Check your internet connection and try again.");
+  }
+
+  return new Promise((resolve, reject) => {
+    const checkout = new window.Razorpay({
+      key,
+      amount: amountInRupees * 100,
+      currency: "INR",
+      name: "CampusGo",
+      description: `Campus ride: ${pickup} to ${destination}`,
+      prefill: {
+        name: user?.name || "",
+        email: user?.email || "",
+        contact: user?.phone || "",
+      },
+      notes: {
+        pickup,
+        destination,
+        mode: "test",
+      },
+      theme: { color: "#FFB800" },
+      handler: resolve,
+      modal: {
+        ondismiss: () => reject(new Error("Payment was cancelled.")),
+      },
+    });
+
+    checkout.on("payment.failed", (response) => {
+      reject(new Error(response?.error?.description || "Payment failed. Please try again."));
+    });
+
+    checkout.open();
+  });
+}
 
 export default function PassengerHome() {
   const { user } = useAuth();
@@ -20,7 +85,6 @@ export default function PassengerHome() {
   const [activeRide, setActiveRide] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [rateOpen, setRateOpen] = useState(false);
   const [rating, setRating] = useState(5);
   const [feedback, setFeedback] = useState("");
 
@@ -36,7 +100,6 @@ export default function PassengerHome() {
       const active = rides.find((r) => ["requested", "accepted", "in_progress"].includes(r.status));
       const lastCompletedNotRated = rides.find((r) => r.status === "completed" && !r.rating);
       setActiveRide(active || lastCompletedNotRated || null);
-      if (lastCompletedNotRated && !active) setRateOpen(true);
     } catch (e) {
       toast.error(formatApiError(e));
     }
@@ -50,7 +113,7 @@ export default function PassengerHome() {
         setActiveRide(msg.ride);
         if (msg.ride.status === "accepted") toast.success("Driver accepted your ride!");
         if (msg.ride.status === "in_progress") toast.info("Your ride has started");
-        if (msg.ride.status === "completed") { toast.success("Ride completed"); setRateOpen(true); }
+        if (msg.ride.status === "completed") toast.success("Ride completed");
         if (msg.ride.status === "cancelled") toast.warning("Ride was cancelled");
       }
       if (msg.type === "driver_location") {
@@ -71,12 +134,18 @@ export default function PassengerHome() {
     if (pickup === destination) { toast.error("Pickup and destination must differ"); return; }
     setSubmitting(true);
     try {
+      const payment = await openRazorpayCheckout({ amountInRupees: RIDE_FARE_INR, user, pickup, destination });
+      toast.success("Payment successful. Booking your ride...");
+
       const { data } = await api.post("/rides/request", {
         pickup, destination,
         pickup_lat: p.lat, pickup_lng: p.lng,
         dest_lat: d.lat, dest_lng: d.lng,
         notes: notes || null,
         scheduled_for: scheduled || null,
+        fare_amount: RIDE_FARE_INR,
+        payment_id: payment.razorpay_payment_id,
+        payment_status: "paid",
       });
       setActiveRide(data);
       toast.success(scheduled ? "Ride scheduled" : "Searching for drivers…");
@@ -103,7 +172,6 @@ export default function PassengerHome() {
     try {
       await api.post(`/rides/${activeRide.id}/rate`, { rating, feedback: feedback || null });
       toast.success("Thanks for the feedback!");
-      setRateOpen(false);
       setActiveRide(null);
       setRating(5); setFeedback("");
       loadAll();
@@ -112,6 +180,7 @@ export default function PassengerHome() {
 
   const pickupLoc = findLocation(pickup);
   const destLoc = findLocation(destination);
+  const showFeedbackForm = activeRide?.status === "completed" && !activeRide.rating;
 
   return (
     <AppLayout>
@@ -148,12 +217,16 @@ export default function PassengerHome() {
 
                 <div className="flex items-center justify-between text-xs text-zinc-500 pt-1">
                   <span>Est. fare</span>
-                  <span className="font-mono-num text-white">₹30</span>
+                  <span className="font-mono-num text-white">₹{RIDE_FARE_INR}</span>
+                </div>
+                <div className="flex items-center gap-2 rounded-md border border-zinc-900 bg-black/30 px-3 py-2 text-xs text-zinc-400">
+                  <CreditCard size={15} className="text-[#FFB800]" />
+                  Razorpay test checkout opens before ride booking.
                 </div>
 
                 <button data-testid="request-ride-button" disabled={submitting} className="w-full bg-[#FFB800] hover:bg-[#E5A600] text-black font-semibold py-3 rounded-md transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
                   {submitting ? <Spinner size={16} /> : <ArrowRight size={16} weight="bold" />}
-                  {scheduled ? "Schedule ride" : "Request ride now"}
+                  {scheduled ? `Pay ₹${RIDE_FARE_INR} & schedule ride` : `Pay ₹${RIDE_FARE_INR} & request ride now`}
                 </button>
               </form>
             )}
@@ -188,6 +261,17 @@ export default function PassengerHome() {
               />
             </div>
 
+            {showFeedbackForm && (
+              <FeedbackCard
+                ride={activeRide}
+                rating={rating}
+                setRating={setRating}
+                feedback={feedback}
+                setFeedback={setFeedback}
+                onSubmit={submitRating}
+              />
+            )}
+
             <div className="border border-zinc-900 bg-zinc-950 rounded-md p-6">
               <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500 mb-4">Drivers online now</div>
               {drivers.length === 0 ? (
@@ -212,15 +296,6 @@ export default function PassengerHome() {
         </div>
       </div>
 
-      {rateOpen && activeRide && activeRide.status === "completed" && !activeRide.rating && (
-        <RateModal
-          ride={activeRide}
-          rating={rating} setRating={setRating}
-          feedback={feedback} setFeedback={setFeedback}
-          onClose={() => setRateOpen(false)}
-          onSubmit={submitRating}
-        />
-      )}
     </AppLayout>
   );
 }
@@ -289,30 +364,50 @@ function LifecycleTrack({ status }) {
   );
 }
 
-function RateModal({ ride, rating, setRating, feedback, setFeedback, onClose, onSubmit }) {
+function FeedbackCard({ ride, rating, setRating, feedback, setFeedback, onSubmit }) {
+  const routeLabel = `${ride.pickup} to ${ride.destination}`;
+
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm p-4" data-testid="rate-modal">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-md p-6 w-full max-w-md fade-up">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-[10px] uppercase tracking-[0.3em] text-zinc-500">Rate your ride</div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={18} /></button>
+    <div className="relative overflow-hidden border border-[#FFB800]/30 bg-[#FFB800]/5 rounded-md p-6 fade-up" data-testid="rate-modal">
+      <div className="absolute inset-y-0 right-0 w-40 bg-[#FFB800]/10 blur-3xl" />
+      <div className="relative grid lg:grid-cols-[1fr_auto] gap-6 items-center">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.25em] text-emerald-300">
+            Ride completed
+          </div>
+          <h3 className="font-display font-bold text-2xl mt-4">Share your ride feedback</h3>
+          <p className="text-sm text-zinc-400 mt-2">
+            Help us keep CampusGo reliable. Rate {ride.driver?.name || "your driver"} for the trip from {routeLabel}.
+          </p>
+
+          <div className="mt-4 grid sm:grid-cols-2 gap-3 text-sm">
+            <div className="border border-zinc-800 bg-black/30 rounded-md p-3">
+              <div className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">Pickup</div>
+              <div className="mt-1 text-white">{ride.pickup}</div>
+            </div>
+            <div className="border border-zinc-800 bg-black/30 rounded-md p-3">
+              <div className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">Destination</div>
+              <div className="mt-1 text-white">{ride.destination}</div>
+            </div>
+          </div>
         </div>
-        <h3 className="font-display font-bold text-xl">How was your ride with {ride.driver?.name || "your driver"}?</h3>
-        <p className="text-sm text-zinc-500 mt-1">{ride.pickup} → {ride.destination}</p>
 
-        <div className="flex justify-center gap-2 my-6">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} data-testid={`star-${n}`} onClick={() => setRating(n)} className="transition-transform hover:scale-110">
-              <Star size={36} weight={n <= rating ? "fill" : "regular"} className={n <= rating ? "text-[#FFB800]" : "text-zinc-700"} />
-            </button>
-          ))}
+        <div className="border border-zinc-800 bg-zinc-950/90 rounded-md p-4 min-w-80">
+          <div className="text-[10px] uppercase tracking-[0.25em] text-zinc-500 mb-3">Your rating</div>
+          <div className="flex justify-between gap-2 mb-4" role="group" aria-label="Ride rating">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" data-testid={`star-${n}`} aria-label={`${n} star${n > 1 ? "s" : ""}`} onClick={() => setRating(n)} className="rounded-md p-1.5 transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[#FFB800]">
+                <Star size={34} weight={n <= rating ? "fill" : "regular"} className={n <= rating ? "text-[#FFB800]" : "text-zinc-700"} />
+              </button>
+            ))}
+          </div>
+
+          <textarea data-testid="rate-feedback" value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={4} placeholder="What went well? Anything we should improve?" className={selectCls + " resize-none"} />
+
+          <button type="button" data-testid="submit-rating" onClick={onSubmit} className="w-full mt-4 bg-[#FFB800] hover:bg-[#E5A600] text-black font-semibold py-3 rounded-md transition-colors">
+            Submit feedback
+          </button>
         </div>
-
-        <textarea data-testid="rate-feedback" value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={3} placeholder="Optional feedback…" className={selectCls + " resize-none"} />
-
-        <button data-testid="submit-rating" onClick={onSubmit} className="w-full mt-4 bg-[#FFB800] hover:bg-[#E5A600] text-black font-semibold py-3 rounded-md transition-colors">
-          Submit
-        </button>
       </div>
     </div>
   );

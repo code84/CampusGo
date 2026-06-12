@@ -131,7 +131,10 @@ npm install
 Edit `frontend/.env`:
 ```
 REACT_APP_BACKEND_URL=http://127.0.0.1:8000
+REACT_APP_RAZORPAY_KEY_ID=rzp_test_RTsX9RpaHtSX4g
 ```
+
+`REACT_APP_RAZORPAY_KEY_ID` enables the Razorpay test checkout before a passenger ride is booked. This is a Create React App frontend, so use the `REACT_APP_` prefix, not `NEXT_PUBLIC_`. Do not put `RAZORPAY_KEY_SECRET` in `frontend/.env`; Razorpay secrets must stay server-side and should never be committed.
 
 ```bash
 npm start
